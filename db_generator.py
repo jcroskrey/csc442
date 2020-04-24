@@ -13,18 +13,13 @@ Base = declarative_base()
 
 engine = create_engine('sqlite:///poly.db', echo=False)
 
-Session = sessionmaker(bind=engine)
+Session = sessionmaker(bind=engine, autoflush=False)
 session = Session()
 
 metadata = MetaData(engine)
 
 sym.init_printing()
 x = sym.Symbol('x')
-
-independence = {}
-degree = {}
-coeffs = {}
-combined_dict = {}
 
 class Ind(Base):
     __tablename__ = 'independence_poly'
@@ -97,15 +92,9 @@ def polynomial_of_tree(T):
             if nx.is_isomorphic(tree, T):
                 T = tree
 
-        # for key in independence:     
-        #     if key == frozenset(T.edges):
-        #         f = independence[key]
-        #         return f
-
         for row in session.query(Ind).filter_by(degree=length):
             if row.edge_set == json.dumps(list(T.edges)):
                 f = sym.sympify(row.polynomial)
-                print(f, type(f))
                 return f
 
 
@@ -124,7 +113,8 @@ def grab_coeffs(poly):
 def populate_independence_db(index):
     """The master plan that calls the functions and keeps track of different variables etc.
     """
-    i = 0
+    global db_index
+
     for tree in nx.nonisomorphic_trees(index):
         # First, create a copy of the object to work with.
         tree1 = tree 
@@ -164,54 +154,21 @@ def populate_independence_db(index):
         final_poly = sum(co*x**i for i, co in enumerate(reversed(final_coeffs)))
         
         # Add the data to our Ind database.
-        new_entry = Ind(id=i, 
-                        edge_set=json.dumps(list(original_tree.edges)), 
+        new_entry = Ind(edge_set=json.dumps(list(original_tree.edges)), 
                         polynomial=str(final_poly), # To convert to sympy.core.add.Add use sym.sympify(poly)
                         coefficients=str(final_coeffs), # To convert back to list use eval(coeffs)
                         degree=len(original_tree)) 
 
         session.add(new_entry)
 
-        # Now, write the polynomial to ind_dict
-        # independence[frozenset(original_tree.edges)] = final_poly
-        # degree[frozenset(original_tree.edges)] = len(original_tree)
-        # coeffs[frozenset(original_tree.edges)] = final_coeffs
+    return None
 
-        i += 1
-
-    return independence, degree, coeffs
-
-# def create_csv():
-#     """ 
-#     Combines the three dictionaries into one and the makes it a .csv file.
-#     """
-#     # First combine the dictionaries into one dictionary with the key as the edge set, and then 
-#     # have the values for each key be a tuple.
-#     dictionaries = [independence, coeffs, degree]
-#     for key in independence.keys():
-#         combined_dict[key] = tuple(combined_dict[key] for combined_dict in dictionaries)
-    
-#     # Now, make combined_dict a .csv file. 
-#     pd.DataFrame.from_dict(data=combined_dict, orient='index').to_csv('combined.csv', header=False, 
-#                         index=True)
-
-#     return combined_dict
-
-    
-    
 def main():
     """ Populate the dictionary.
     """
-    for degree in range(3, 8):
+    for degree in range(8, 13):
         populate_independence_db(degree)
-    
-    # After adding all the entries to the session, commit it here.
-    session.commit()
-    
-    # create_csv()
-
-    for row in session.query(Ind).all():
-        print(row)
+        session.commit()
 
     return None
 
